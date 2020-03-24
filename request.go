@@ -166,6 +166,7 @@ func (s *Server) handleConnect(ctx context.Context, conn conn, req *Request) err
 	} else {
 		ctx = ctx_
 	}
+	ctx = SetIP(ctx, string(req.AuthContext.Payload["IP"]))
 
 	// Attempt to connect
 	dial := s.config.Dial
@@ -174,7 +175,7 @@ func (s *Server) handleConnect(ctx context.Context, conn conn, req *Request) err
 			return net.Dial(net_, addr)
 		}
 	}
-	target, err := dial(ctx, "tcp", req.realDestAddr.Address())
+	target, err := dial(ctx, "ip4:tcp", req.realDestAddr.Address())
 	if err != nil {
 		msg := err.Error()
 		resp := hostUnreachable
@@ -191,8 +192,8 @@ func (s *Server) handleConnect(ctx context.Context, conn conn, req *Request) err
 	defer target.Close()
 
 	// Send success
-	local := target.LocalAddr().(*net.TCPAddr)
-	bind := AddrSpec{IP: local.IP, Port: local.Port}
+	local := target.LocalAddr().(*net.IPAddr)
+	bind := AddrSpec{IP: local.IP}
 	if err := sendReply(conn, successReply, &bind); err != nil {
 		return fmt.Errorf("Failed to send reply: %v", err)
 	}

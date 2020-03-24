@@ -3,6 +3,7 @@ package socks5
 import (
 	"fmt"
 	"io"
+	"strings"
 )
 
 const (
@@ -148,4 +149,77 @@ func readMethods(r io.Reader) ([]byte, error) {
 	methods := make([]byte, numMethods)
 	_, err := io.ReadAtLeast(r, methods, numMethods)
 	return methods, err
+}
+
+// FromIPUserPassAuthenticator is used to handle username/password based
+// authentication
+type FromIPUserPassAuthenticator struct {
+	Credentials CredentialStore
+}
+
+func (a FromIPUserPassAuthenticator) GetCode() uint8 {
+	return UserPassAuth
+}
+
+func (a FromIPUserPassAuthenticator) Authenticate(reader io.Reader, writer io.Writer) (*AuthContext, error) {
+	// Tell the client to use user/pass auth
+	if _, err := writer.Write([]byte{socks5Version, UserPassAuth}); err != nil {
+		return nil, err
+	}
+
+	// Get the version and username length
+	header := []byte{0, 0}
+	if _, err := io.ReadAtLeast(reader, header, 2); err != nil {
+		return nil, err
+	}
+
+	// Ensure we are compatible
+	if header[0] != userAuthVersion {
+		return nil, fmt.Errorf("Unsupported auth version: %v", header[0])
+	}
+
+	// Get the user name
+	userLen := int(header[1])
+	userAndIP := make([]byte, userLen)
+	if _, err := io.ReadAtLeast(reader, userAndIP, userLen); err != nil {
+		return nil, err
+	}
+	userip := strings.Split(string(userAndIP), ":")
+	// Todo: assert length == 2
+	user := userip[0]
+	ip := userip[1]
+
+	// Get the password length
+	if _, err := reader.Read(header[:1]); err != nil {
+		return nil, err
+	}
+
+	// Get the password
+	passLen := int(header[0])
+	pass := make([]byte, passLen)
+	if _, err := io.ReadAtLeast(reader, pass, passLen); err != nil {
+		return nil, err
+	}
+
+	// Verify the password
+	if a.Credentials.Valid(user, string(pass)) {
+		if _, err := writer.Write([]byte{userAuthVersion, authSuccess}); err != nil {
+			return nil, err
+		}
+	} else {
+		if _, err := writer.Write([]byte{userAuthVersion, authFailure}); err != nil {
+			return nil, err
+		}
+		return nil, UserAuthFailed
+	}
+
+	fmt.Println("IPP")
+	fmt.Println(ip)
+	fmt.Println(user)
+
+	// Done
+	return &AuthContext{UserPassAuth, map[string]string{
+		"Username": user,
+		"IP":       ip,
+	}}, nil
 }
