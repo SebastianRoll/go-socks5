@@ -2,7 +2,7 @@ package main
 
 import (
 	"encoding/base64"
-	"fmt"
+	"encoding/json"
 	"github.com/sebastianroll/go-socks5"
 	"log"
 	"net"
@@ -43,24 +43,38 @@ func validate(username, password string) bool {
 	return false
 }
 
+type InterfaceResponse struct {
+	HardwareAddr string
+	Flags        string
+	Addrs        []net.Addr
+}
+
 func interfaces(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
 	ints, err := net.Interfaces()
+	response := []InterfaceResponse{}
 	if err != nil {
 		panic(err)
 	}
 	for _, s := range ints {
-		fmt.Fprintf(w, "\n"+string(s.HardwareAddr)+"\n")
-		fmt.Fprintf(w, string(s.Flags))
+		intresp := InterfaceResponse{}
+		intresp.HardwareAddr = string(s.HardwareAddr)
+		intresp.Flags = string(s.Flags)
 		addrs, err := s.Addrs()
 		if err != nil {
 			panic(err)
 		}
-		for _, a := range addrs {
-			fmt.Fprintf(w, string(a.Network())+"\n")
-			fmt.Fprintf(w, string(a.String())+"\n")
-		}
-
+		intresp.Addrs = addrs
+		response = append(response, intresp)
 	}
+	js, err := json.Marshal(response)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Write(js)
+
 }
 
 func main() {
@@ -87,8 +101,7 @@ func main() {
 		}
 	}()
 
-	http.HandleFunc("/interfaces", interfaces)
-	//http.HandleFunc("/interfaces", basicAuth(interfaces))
+	http.HandleFunc("/interfaces", basicAuth(interfaces))
 	http.ListenAndServe(":8998", nil)
 
 }
