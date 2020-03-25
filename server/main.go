@@ -1,10 +1,67 @@
 package main
 
 import (
+	"encoding/base64"
+	"fmt"
 	"github.com/sebastianroll/go-socks5"
 	"log"
+	"net"
+	"net/http"
 	"os"
+	"strings"
 )
+
+type handler func(w http.ResponseWriter, r *http.Request)
+
+func basicAuth(pass handler) handler {
+
+	return func(w http.ResponseWriter, r *http.Request) {
+
+		auth := strings.SplitN(r.Header.Get("Authorization"), " ", 2)
+
+		if len(auth) != 2 || auth[0] != "Basic" {
+			http.Error(w, "authorization failed", http.StatusUnauthorized)
+			return
+		}
+
+		payload, _ := base64.StdEncoding.DecodeString(auth[1])
+		pair := strings.SplitN(string(payload), ":", 2)
+
+		if len(pair) != 2 || !validate(pair[0], pair[1]) {
+			http.Error(w, "authorization failed", http.StatusUnauthorized)
+			return
+		}
+
+		pass(w, r)
+	}
+}
+
+func validate(username, password string) bool {
+	if username == os.Getenv("SOCKS5_USER") && password == os.Getenv("SOCKS5_PASSWORD") {
+		return true
+	}
+	return false
+}
+
+func interfaces(w http.ResponseWriter, req *http.Request) {
+	ints, err := net.Interfaces()
+	if err != nil {
+		panic(err)
+	}
+	for _, s := range ints {
+		fmt.Fprintf(w, "\n"+string(s.HardwareAddr)+"\n")
+		fmt.Fprintf(w, string(s.Flags))
+		addrs, err := s.Addrs()
+		if err != nil {
+			panic(err)
+		}
+		for _, a := range addrs {
+			fmt.Fprintf(w, string(a.Network())+"\n")
+			fmt.Fprintf(w, string(a.String())+"\n")
+		}
+
+	}
+}
 
 func main() {
 
@@ -24,8 +81,14 @@ func main() {
 	}
 
 	// Start listening
-	if err := serv.ListenAndServe("tcp", "127.0.0.1:8989"); err != nil {
-		panic(err)
-	}
+	go func() {
+		if err := serv.ListenAndServe("tcp", "127.0.0.1:8989"); err != nil {
+			panic(err)
+		}
+	}()
+
+	http.HandleFunc("/interfaces", interfaces)
+	//http.HandleFunc("/interfaces", basicAuth(interfaces))
+	http.ListenAndServe(":8998", nil)
 
 }
