@@ -167,6 +167,8 @@ func (s *Server) handleConnect(ctx context.Context, conn conn, req *Request) err
 		ctx = ctx_
 	}
 	ctx = SetIP(ctx, string(req.AuthContext.Payload["IP"]))
+	fmt.Println("IP")
+	fmt.Println(string(req.AuthContext.Payload["IP"]))
 
 	// Attempt to connect
 	dial := s.config.Dial
