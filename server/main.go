@@ -44,9 +44,9 @@ func validate(username, password string) bool {
 }
 
 type InterfaceResponse struct {
-	HardwareAddr string
-	Flags        string
-	Addrs        []net.Addr
+	Name  string
+	Flags []string
+	Addrs []string
 }
 
 func interfaces(w http.ResponseWriter, req *http.Request) {
@@ -59,13 +59,33 @@ func interfaces(w http.ResponseWriter, req *http.Request) {
 	}
 	for _, s := range ints {
 		intresp := InterfaceResponse{}
-		intresp.HardwareAddr = string(s.HardwareAddr)
-		intresp.Flags = string(s.Flags)
+		intresp.Name = s.Name
+
+		if s.Flags&net.FlagUp != 0 {
+			intresp.Flags = append(intresp.Flags, "FlagUp")
+		}
+		if s.Flags&net.FlagBroadcast != 0 {
+			intresp.Flags = append(intresp.Flags, "FlagBroadcast")
+		}
+		if s.Flags&net.FlagLoopback != 0 {
+			intresp.Flags = append(intresp.Flags, "FlagLoopback")
+		}
+		if s.Flags&net.FlagPointToPoint != 0 {
+			intresp.Flags = append(intresp.Flags, "FlagPointToPoint")
+		}
+		if s.Flags&net.FlagMulticast != 0 {
+			intresp.Flags = append(intresp.Flags, "FlagMulticast")
+		}
+
 		addrs, err := s.Addrs()
 		if err != nil {
 			panic(err)
 		}
-		intresp.Addrs = addrs
+		adds := []string{}
+		for _, a := range addrs {
+			adds = append(adds, a.String())
+		}
+		intresp.Addrs = adds
 		response = append(response, intresp)
 	}
 	js, err := json.Marshal(response)
@@ -96,12 +116,13 @@ func main() {
 
 	// Start listening
 	go func() {
-		if err := serv.ListenAndServe("tcp", "127.0.0.1:8989"); err != nil {
+		if err := serv.ListenAndServe("tcp", "0.0.0.0:8989"); err != nil {
 			panic(err)
 		}
 	}()
 
-	http.HandleFunc("/interfaces", basicAuth(interfaces))
+	//http.HandleFunc("/interfaces", basicAuth(interfaces))
+	http.HandleFunc("/interfaces", interfaces)
 	http.ListenAndServe(":8998", nil)
 
 }
