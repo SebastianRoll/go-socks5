@@ -3,7 +3,8 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
-	"github.com/sebastianroll/go-socks5"
+	"fmt"
+	"github.com/SebastianRoll/go-socks5"
 	"log"
 	"net"
 	"net/http"
@@ -37,6 +38,8 @@ func basicAuth(pass handler) handler {
 }
 
 func validate(username, password string) bool {
+	fmt.Println(username)
+	fmt.Println(os.Getenv("SOCKS5_USER"))
 	if username == os.Getenv("SOCKS5_USER") && password == os.Getenv("SOCKS5_PASSWORD") {
 		return true
 	}
@@ -113,10 +116,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
 	// Start listening
 	go func() {
-		if err := serv.ListenAndServe("tcp", "0.0.0.0:8989"); err != nil {
+		if err := serv.ListenAndServe("tcp", ":8989"); err != nil {
 			panic(err)
 		}
 	}()
