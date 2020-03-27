@@ -181,7 +181,7 @@ func (s *Server) handleConnectIP(ctx context.Context, conn conn, req *Request) e
 			return net.Dial(net_, addr)
 		}
 	}
-	network := "ip4:tcp"
+	network := "tcp4"
 
 	fmt.Println("Special DialIP()")
 	fmt.Println("network:" + network)
@@ -207,10 +207,8 @@ func (s *Server) handleConnectIP(ctx context.Context, conn conn, req *Request) e
 	fmt.Printf("remoteAddr:%v\n", target.RemoteAddr())
 
 	// Send success
-	//local := target.LocalAddr().(*net.TCPAddr)
-	//bind := AddrSpec{IP: local.IP, Port: local.Port}
-	local := target.LocalAddr().(*net.IPAddr)
-	bind := AddrSpec{IP: local.IP}
+	local := target.LocalAddr().(*net.TCPAddr)
+	bind := AddrSpec{IP: local.IP, Port: local.Port}
 	if err := sendReply(conn, successReply, &bind); err != nil {
 		return fmt.Errorf("Failed to send reply: %v", err)
 	}

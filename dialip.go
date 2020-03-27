@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"golang.org/x/net/context"
 	"net"
+	"strconv"
 )
 
 type key int
@@ -19,18 +20,24 @@ func GetIP(ctx context.Context) (string, bool) {
 }
 
 func DialFromIP(ctx context.Context, network, addr string) (net.Conn, error) {
+	fmt.Println("network:" + network)
+	fmt.Println("raddr:" + addr)
+
+	addrIP, addrPort, err := net.SplitHostPort(addr)
+	if err != nil {
+		panic(err)
+	}
+	port, err := strconv.Atoi(addrPort)
+	if err != nil {
+		panic(err)
+	}
+	raddr := net.TCPAddr{IP: net.ParseIP(addrIP), Port: port}
 	ip, ok := GetIP(ctx)
 	if !ok {
-		return net.Dial(network, addr)
+		fmt.Println("laddr: ASSIGNED")
+		return net.DialTCP(network, nil, &raddr)
 	}
-	ip = ip
-	fmt.Println("network:" + network)
 	fmt.Println("laddr:" + ip)
-	fmt.Println("raddr:" + addr)
-	var (
-		laddr net.IPAddr = net.IPAddr{IP: net.ParseIP(ip)}
-		raddr net.IPAddr = net.IPAddr{IP: net.ParseIP(addr)}
-	)
-	_ = laddr
-	return net.DialIP(network, &laddr, &raddr)
+	laddr := net.TCPAddr{IP: net.ParseIP(ip)}
+	return net.DialTCP(network, &laddr, &raddr)
 }
