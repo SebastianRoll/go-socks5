@@ -1,5 +1,7 @@
 package socks5
 
+import "fmt"
+
 // CredentialStore is used to support user/pass authentication
 type CredentialStore interface {
 	Valid(user, password string) bool
@@ -13,5 +15,7 @@ func (s StaticCredentials) Valid(user, password string) bool {
 	if !ok {
 		return false
 	}
+	fmt.Println(string(password))
+	fmt.Println(string(pass))
 	return password == pass
 }

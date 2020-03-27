@@ -21,13 +21,16 @@ func GetIP(ctx context.Context) (string, bool) {
 func DialFromIP(ctx context.Context, network, addr string) (net.Conn, error) {
 	ip, ok := GetIP(ctx)
 	if !ok {
-		panic("IP was not found")
+		return net.Dial(network, addr)
 	}
-	fmt.Println(ip)
-	fmt.Println(addr)
+	ip = ip
+	fmt.Println("network:" + network)
+	fmt.Println("laddr:" + ip)
+	fmt.Println("raddr:" + addr)
 	var (
 		laddr net.IPAddr = net.IPAddr{IP: net.ParseIP(ip)}
 		raddr net.IPAddr = net.IPAddr{IP: net.ParseIP(addr)}
 	)
+	_ = laddr
 	return net.DialIP(network, &laddr, &raddr)
 }

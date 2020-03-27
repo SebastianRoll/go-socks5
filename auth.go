@@ -166,6 +166,7 @@ func (a FromIPUserPassAuthenticator) Authenticate(reader io.Reader, writer io.Wr
 	if _, err := writer.Write([]byte{socks5Version, UserPassAuth}); err != nil {
 		return nil, err
 	}
+	fmt.Println("authing")
 
 	// Get the version and username length
 	header := []byte{0, 0}
@@ -184,11 +185,14 @@ func (a FromIPUserPassAuthenticator) Authenticate(reader io.Reader, writer io.Wr
 	if _, err := io.ReadAtLeast(reader, userAndIP, userLen); err != nil {
 		return nil, err
 	}
-	userip := strings.Split(string(userAndIP), ":")
+	userip := strings.Split(string(userAndIP), "_")
 	// Todo: assert length == 2
 	user := userip[0]
-	ip := userip[1]
 
+	var ip string = ""
+	if len(userip) > 1 {
+		ip = userip[1]
+	}
 	// Get the password length
 	if _, err := reader.Read(header[:1]); err != nil {
 		return nil, err
@@ -210,12 +214,14 @@ func (a FromIPUserPassAuthenticator) Authenticate(reader io.Reader, writer io.Wr
 		if _, err := writer.Write([]byte{userAuthVersion, authFailure}); err != nil {
 			return nil, err
 		}
+		fmt.Println("UserAuthFailed")
 		return nil, UserAuthFailed
 	}
 
-	fmt.Println("IPP")
+	fmt.Println("IP AND USER")
 	fmt.Println(ip)
 	fmt.Println(user)
+	fmt.Println("IP AND USER END")
 
 	// Done
 	return &AuthContext{UserPassAuth, map[string]string{

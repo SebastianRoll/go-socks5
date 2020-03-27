@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/SebastianRoll/go-socks5"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -53,6 +54,7 @@ type InterfaceResponse struct {
 }
 
 func interfaces(w http.ResponseWriter, req *http.Request) {
+	fmt.Println("In /interfaces")
 	w.Header().Set("Content-Type", "application/json")
 
 	ints, err := net.Interfaces()
@@ -101,7 +103,34 @@ func interfaces(w http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
+	// Create a local listener
+	l, err := net.Listen("tcp", ":9998")
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("PONG server ja")
+	go func() {
+		for {
+			conn, err := l.Accept()
+			if err != nil {
+				panic(err)
+			}
+			fmt.Println("in PONG server")
 
+			buf := make([]byte, 5)
+			if _, err := io.ReadAtLeast(conn, buf, 4); err != nil {
+				panic(err)
+			}
+			fmt.Printf(string(buf))
+
+			//if !bytes.Equal(buf, []byte("ping")) {
+			//	t.Fatalf("bad: %v", buf)
+			//}
+			conn.Write([]byte("pong"))
+			conn.Close()
+
+		}
+	}()
 	// Create a socks server
 	creds := socks5.StaticCredentials{
 		os.Getenv("SOCKS5_USER"): os.Getenv("SOCKS5_PASSWORD"),

@@ -12,6 +12,7 @@ import (
 )
 
 func TestSOCKS5_Connect(t *testing.T) {
+
 	// Create a local listener
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

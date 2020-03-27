@@ -142,7 +142,12 @@ func (s *Server) handleRequest(req *Request, conn conn) error {
 	// Switch on the command
 	switch req.Command {
 	case ConnectCommand:
-		return s.handleConnect(ctx, conn, req)
+		if val, ok := req.AuthContext.Payload["IP"]; ok && val != "" {
+			ctx = SetIP(ctx, string(val))
+			return s.handleConnectIP(ctx, conn, req)
+		} else {
+			return s.handleConnect(ctx, conn, req)
+		}
 	case BindCommand:
 		return s.handleBind(ctx, conn, req)
 	case AssociateCommand:
@@ -156,7 +161,9 @@ func (s *Server) handleRequest(req *Request, conn conn) error {
 }
 
 // handleConnect is used to handle a connect command
-func (s *Server) handleConnect(ctx context.Context, conn conn, req *Request) error {
+func (s *Server) handleConnectIP(ctx context.Context, conn conn, req *Request) error {
+	fmt.Println("--handleConnectIP--")
+
 	// Check if this is allowed
 	if ctx_, ok := s.config.Rules.Allow(ctx, req); !ok {
 		if err := sendReply(conn, ruleFailure, nil); err != nil {
@@ -166,9 +173,6 @@ func (s *Server) handleConnect(ctx context.Context, conn conn, req *Request) err
 	} else {
 		ctx = ctx_
 	}
-	ctx = SetIP(ctx, string(req.AuthContext.Payload["IP"]))
-	fmt.Println("IP")
-	fmt.Println(string(req.AuthContext.Payload["IP"]))
 
 	// Attempt to connect
 	dial := s.config.Dial
@@ -177,7 +181,81 @@ func (s *Server) handleConnect(ctx context.Context, conn conn, req *Request) err
 			return net.Dial(net_, addr)
 		}
 	}
-	target, err := dial(ctx, "ip4:tcp", req.realDestAddr.Address())
+	network := "ip4:tcp"
+
+	fmt.Println("Special DialIP()")
+	fmt.Println("network:" + network)
+	fmt.Println("FROM_IP:" + string(req.AuthContext.Payload["IP"]))
+	fmt.Println("destination addr:" + req.realDestAddr.Address())
+	target, err := dial(ctx, network, req.realDestAddr.Address())
+	if err != nil {
+		msg := err.Error()
+		resp := hostUnreachable
+		if strings.Contains(msg, "refused") {
+			resp = connectionRefused
+		} else if strings.Contains(msg, "network is unreachable") {
+			resp = networkUnreachable
+		}
+		if err := sendReply(conn, resp, nil); err != nil {
+			return fmt.Errorf("Failed to send reply: %v", err)
+		}
+		return fmt.Errorf("Connect to %v failed: %v", req.DestAddr, err)
+	}
+	defer target.Close()
+	fmt.Println("SUCCESS")
+	fmt.Printf("localAddr:%v\n", target.LocalAddr())
+	fmt.Printf("remoteAddr:%v\n", target.RemoteAddr())
+
+	// Send success
+	//local := target.LocalAddr().(*net.TCPAddr)
+	//bind := AddrSpec{IP: local.IP, Port: local.Port}
+	local := target.LocalAddr().(*net.IPAddr)
+	bind := AddrSpec{IP: local.IP}
+	if err := sendReply(conn, successReply, &bind); err != nil {
+		return fmt.Errorf("Failed to send reply: %v", err)
+	}
+
+	// Start proxying
+	errCh := make(chan error, 2)
+	go proxy(target, req.bufConn, errCh)
+	go proxy(conn, target, errCh)
+
+	// Wait
+	for i := 0; i < 2; i++ {
+		e := <-errCh
+		if e != nil {
+			// return from this function closes target (and conn).
+			return e
+		}
+	}
+	return nil
+}
+
+func (s *Server) handleConnect(ctx context.Context, conn conn, req *Request) error {
+	fmt.Println("--handleConnect--")
+	// Check if this is allowed
+	if ctx_, ok := s.config.Rules.Allow(ctx, req); !ok {
+		if err := sendReply(conn, ruleFailure, nil); err != nil {
+			return fmt.Errorf("Failed to send reply: %v", err)
+		}
+		return fmt.Errorf("Connect to %v blocked by rules", req.DestAddr)
+	} else {
+		ctx = ctx_
+	}
+
+	// Attempt to connect
+
+	dial := s.config.Dial
+	if dial == nil {
+		dial = func(ctx context.Context, net_, addr string) (net.Conn, error) {
+			return net.Dial(net_, addr)
+		}
+	}
+	network := "tcp"
+	fmt.Println("Vanilla Dial()")
+	fmt.Println("network:" + network)
+	fmt.Println("destination addr:" + req.realDestAddr.Address())
+	target, err := dial(ctx, network, req.realDestAddr.Address())
 	if err != nil {
 		msg := err.Error()
 		resp := hostUnreachable
@@ -193,9 +271,12 @@ func (s *Server) handleConnect(ctx context.Context, conn conn, req *Request) err
 	}
 	defer target.Close()
 
+	fmt.Println("SUCCESS")
+	fmt.Printf("localAddr:%v\n", target.LocalAddr())
+	fmt.Printf("remoteAddr:%\nv", target.RemoteAddr())
 	// Send success
-	local := target.LocalAddr().(*net.IPAddr)
-	bind := AddrSpec{IP: local.IP}
+	local := target.LocalAddr().(*net.TCPAddr)
+	bind := AddrSpec{IP: local.IP, Port: local.Port}
 	if err := sendReply(conn, successReply, &bind); err != nil {
 		return fmt.Errorf("Failed to send reply: %v", err)
 	}
@@ -346,7 +427,7 @@ func sendReply(w io.Writer, resp uint8, addr *AddrSpec) error {
 	copy(msg[4:], addrBody)
 	msg[4+len(addrBody)] = byte(addrPort >> 8)
 	msg[4+len(addrBody)+1] = byte(addrPort & 0xff)
-
+	fmt.Println(msg)
 	// Send the message
 	_, err := w.Write(msg)
 	return err
